@@ -7,6 +7,7 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  *********************************************************************/
+import * as pty from '@theia/node-pty';
 import { spawn } from 'child_process';
 import * as events from 'events';
 import { Writable } from 'stream';
@@ -14,6 +15,7 @@ import { logger } from 'vscode-debugadapter/lib/logger';
 import { AttachRequestArguments, LaunchRequestArguments } from './GDBDebugSession';
 import { MIResponse } from './mi';
 import { MIParser } from './MIParser';
+import { PtyWrapper } from './ptyWrapper';
 
 export interface MIExecNextRequest {
     reverse?: boolean;
@@ -40,6 +42,15 @@ export class GDBBackend extends events.EventEmitter {
         const proc = spawn(gdb, ['--interpreter=mi2']);
         this.out = proc.stdin;
         return this.parser.parse(proc.stdout);
+    }
+
+    public async spawnInClientTerminal(args: LaunchRequestArguments | AttachRequestArguments,
+        cb: (args: string[]) => Promise<void>) {
+        const gdb = args.gdb ? args.gdb : 'gdb';
+        const pts = new PtyWrapper((pty as any).open());
+        await cb([gdb, '-ex', `new-ui mi2 ${pts.name}`]);
+        this.out = pts.in;
+        return this.parser.parse(pts.out);
     }
 
     public sendCommand<T>(command: string): Promise<T> {

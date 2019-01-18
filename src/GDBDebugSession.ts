@@ -25,6 +25,7 @@ export interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArgum
     arguments?: string;
     verbose?: boolean;
     logFile?: string;
+    runInTerminal?: boolean;
 }
 
 export interface AttachRequestArguments extends DebugProtocol.LaunchRequestArguments {
@@ -33,6 +34,7 @@ export interface AttachRequestArguments extends DebugProtocol.LaunchRequestArgum
     processId: string;
     verbose?: boolean;
     logFile?: string;
+    runInTerminal?: boolean;
 }
 
 export interface FrameReference {
@@ -68,6 +70,8 @@ export class GDBDebugSession extends LoggingDebugSession {
     protected isAttach = false;
     protected isRunning = false;
 
+    protected supportsRunInTerminalRequest = false;
+
     private frameHandles = new Handles<FrameReference>();
     private variableHandles = new Handles<VariableReference>();
 
@@ -92,6 +96,7 @@ export class GDBDebugSession extends LoggingDebugSession {
 
     protected initializeRequest(response: DebugProtocol.InitializeResponse,
         args: DebugProtocol.InitializeRequestArguments): void {
+        this.supportsRunInTerminalRequest = args.supportsRunInTerminalRequest === true;
         response.body = response.body || {};
         response.body.supportsConfigurationDoneRequest = true;
         response.body.supportsSetVariable = true;
@@ -109,7 +114,7 @@ export class GDBDebugSession extends LoggingDebugSession {
 
             this.gdb.on('async', (result) => this.handleGDBAsync(result));
 
-            await this.gdb.spawn(args);
+            await this.spawn(args);
             await this.gdb.sendFileExecAndSymbols(args.program);
 
             await mi.sendTargetAttachRequest(this.gdb, { pid: args.processId });
@@ -132,7 +137,7 @@ export class GDBDebugSession extends LoggingDebugSession {
 
             this.gdb.on('async', (result) => this.handleGDBAsync(result));
 
-            await this.gdb.spawn(args);
+            await this.spawn(args);
             await this.gdb.sendFileExecAndSymbols(args.program);
 
             this.gdb.sendEnablePrettyPrint();
@@ -145,6 +150,36 @@ export class GDBDebugSession extends LoggingDebugSession {
         } catch (err) {
             this.sendErrorResponse(response, 1, err.message);
         }
+    }
+
+    protected spawn(args: LaunchRequestArguments | AttachRequestArguments) {
+        if (this.supportsRunInTerminalRequest && args.runInTerminal) {
+            logger.verbose('cdt-gdb-adapter: spawning gdb console in client terminal');
+            return this.spawnInClientTerminal(args);
+        }
+        return this.gdb.spawn(args);
+    }
+
+    protected async spawnInClientTerminal(
+        args: DebugProtocol.LaunchRequestArguments | DebugProtocol.AttachRequestArguments) {
+        return this.gdb.spawnInClientTerminal(
+            args as LaunchRequestArguments | AttachRequestArguments,
+            async (command) => {
+                const response = await new Promise<DebugProtocol.Response>((resolve) =>
+                    this.sendRequest('runInTerminal', {
+                        kind: 'integrated',
+                        cwd: process.cwd(),
+                        env: process.env,
+                        args: command,
+                    } as DebugProtocol.RunInTerminalRequestArguments, 5000, resolve),
+                );
+                if (!response.success || response.message === 'timeout') {
+                    const message = 'could not start the terminal on the client';
+                    logger.error(message);
+                    throw new Error(message);
+                }
+            },
+        );
     }
 
     protected async setBreakPointsRequest(response: DebugProtocol.SetBreakpointsResponse,
