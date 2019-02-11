@@ -2,7 +2,7 @@
     'targets': [
         {
             'target_name': 'pty',
-            'sources': ['src/native/pty.cc'],
+            'sources': ['src/pty/pty.cc'],
             'conditions': [
                 ['OS=="win"', { 'defines': ['WINDOWS'] }],
             ],

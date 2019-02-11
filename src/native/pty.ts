@@ -12,7 +12,7 @@ import { Socket } from 'net';
 // tslint:disable-next-line:variable-name
 const tty_wrap = (process as any).binding('tty_wrap');
 // tslint:disable-next-line:no-var-requires
-const pty = require('../../build/Release/pty.node');
+const pty = require('../../native/build/Release/pty.node');
 interface PtyHandles {
     master_fd: number;
     slave_name: string;

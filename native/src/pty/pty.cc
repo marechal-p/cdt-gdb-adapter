@@ -10,7 +10,7 @@
 #include "napi.h"
 
 #ifndef WINDOWS
-#include "scoped_fd.h"
+#include "../common/scoped_fd.h"
 #include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
