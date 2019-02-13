@@ -49,3 +49,8 @@ export interface MIVariableInfo {
     value?: string;
     type?: string;
 }
+
+export interface GDBTargetParams {
+    name: 'core' | 'native' | 'remote' | 'extended-remote' | 'sim';
+    arguments: string;
+}

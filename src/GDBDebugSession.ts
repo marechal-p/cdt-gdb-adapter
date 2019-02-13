@@ -16,6 +16,7 @@ import {
 import { DebugProtocol } from 'vscode-debugprotocol';
 import { GDBBackend } from './GDBBackend';
 import * as mi from './mi';
+import { GDBTargetParams } from './mi';
 import { sendDataReadMemoryBytes } from './mi/data';
 import * as varMgr from './varManager';
 
@@ -26,6 +27,7 @@ export interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArgum
     verbose?: boolean;
     logFile?: string;
     openGdbConsole?: boolean;
+    target?: GDBTargetParams;
 }
 
 export interface AttachRequestArguments extends DebugProtocol.LaunchRequestArguments {
@@ -35,6 +37,7 @@ export interface AttachRequestArguments extends DebugProtocol.LaunchRequestArgum
     verbose?: boolean;
     logFile?: string;
     openGdbConsole?: boolean;
+    target?: GDBTargetParams;
 }
 
 export interface FrameReference {
@@ -138,7 +141,11 @@ export class GDBDebugSession extends LoggingDebugSession {
             this.gdb.on('notifyAsync', (resultClass, resultData) => this.handleGDBNotify(resultClass, resultData));
 
             await this.spawn(args);
-            await this.gdb.sendFileExecAndSymbols(args.program);
+            if (args.target) {
+                await mi.sendTargetSelect(this.gdb, args.target);
+            } else {
+                await this.gdb.sendFileExecAndSymbols(args.program);
+            }
 
             await mi.sendTargetAttachRequest(this.gdb, { pid: args.processId });
             this.sendEvent(new OutputEvent(`attached to process ${args.processId}`));
@@ -162,7 +169,11 @@ export class GDBDebugSession extends LoggingDebugSession {
             this.gdb.on('notifyAsync', (resultClass, resultData) => this.handleGDBNotify(resultClass, resultData));
 
             await this.spawn(args);
-            await this.gdb.sendFileExecAndSymbols(args.program);
+            if (args.target) {
+                await mi.sendTargetSelect(this.gdb, args.target);
+            } else {
+                await this.gdb.sendFileExecAndSymbols(args.program);
+            }
 
             this.gdb.sendEnablePrettyPrint();
 
