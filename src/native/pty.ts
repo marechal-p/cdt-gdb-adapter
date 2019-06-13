@@ -7,10 +7,9 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  *********************************************************************/
-import { Socket } from 'net';
+import * as stream from 'stream';
+import { FileDuplex } from '../fileDuplex';
 
-// tslint:disable-next-line:variable-name
-const tty_wrap = (process as any).binding('tty_wrap');
 // tslint:disable-next-line:no-var-requires
 const pty = require('../../build/Release/pty.node');
 interface PtyHandles {
@@ -20,15 +19,17 @@ interface PtyHandles {
 
 export class Pty {
 
-    public master: Socket;
-    public readonly name: string;
+    public master: stream.Duplex;
+    public name: string;
 
     constructor() {
         const handles: PtyHandles = pty.create_pty();
-        const backup = tty_wrap.guessHandleType;
-        tty_wrap.guessHandleType = () => 'PIPE';
-        this.master = new Socket({ fd: handles.master_fd });
-        tty_wrap.guessHandleType = backup;
+        this.master = FileDuplex.FromFd(handles.master_fd);
+        this.master.once('close', () => this.name = '');
         this.name = handles.slave_name;
+    }
+
+    public destroy(): void {
+        this.master.destroy();
     }
 }

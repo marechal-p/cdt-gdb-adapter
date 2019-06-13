@@ -54,7 +54,8 @@ static Napi::Value create_pty(const Napi::CallbackInfo &info) {
   _throw_exc(env, ".create_pty() is not supported on Windows");
 #else
   // master_fd will be closed on scope exit if an error is thrown.
-  scoped_fd master_fd(open("/dev/ptmx", O_RDWR));
+  // scoped_fd master_fd(open("/dev/ptmx", O_RDWR || O_NOCTTY));
+  scoped_fd master_fd(posix_openpt(O_RDWR | O_NOCTTY));
   if (master_fd == -1) {
     _throw_exc(env, "open(\"/dev/ptmx\", O_RDWR) failed");
   }
@@ -63,9 +64,20 @@ static Napi::Value create_pty(const Napi::CallbackInfo &info) {
   termios configuration;
   int error;
 
+  // see: man ptmx
+  error = grantpt(master_fd.get());
+  if (error) {
+    _throw_exc_format(env, error, "grantpt");
+  }
+  error = unlockpt(master_fd.get());
+  if (error) {
+    _throw_exc_format(env, error, "unlockpt");
+  }
+
   error = tcgetattr(master_fd.get(), &configuration);
-  if (error)
+  if (error) {
     _throw_exc_format(env, error, "tcgetattr");
+  }
 
   // By default, the master tty will be in echo mode, which means that we will
   // get what we write back when we read from it. The stream is also line
@@ -74,19 +86,14 @@ static Napi::Value create_pty(const Napi::CallbackInfo &info) {
   cfmakeraw(&configuration);
 
   error = tcsetattr(master_fd.get(), 0, &configuration);
-  if (error)
+  if (error) {
     _throw_exc_format(env, error, "tcsetattr");
+  }
 
-  // see: man ptmx
   error = ptsname_r(master_fd.get(), slave_name, SLAVE_NAME_MAX_SIZE);
-  if (error)
+  if (error) {
     _throw_exc_format(env, error, "ptsname_r");
-  error = grantpt(master_fd.get());
-  if (error)
-    _throw_exc_format(env, error, "grantpt");
-  error = unlockpt(master_fd.get());
-  if (error)
-    _throw_exc_format(env, error, "unlockpt");
+  }
 
   // We release master_fd for the scoped_fd wrapper to not actually close it,
   // as we want to send it to the running JS scripts.
